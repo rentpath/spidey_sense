@@ -1,4 +1,5 @@
 require 'uri'
+require "net/http"
 require 'wombat'
 require 'duke_of_url'
 
@@ -34,22 +35,30 @@ class ScreamingFrog
   def self.build_stat_results(crawl_results)
     {
       status: crawl_results[:status],
-      canonical: crawl_results["canonical"]
+      canonical: crawl_results['canonical'],
+      description: crawl_results['description']
     }
   end
 
   def self.build_url_results(u, crawl_results)
     return {} if crawl_results.nil? || crawl_results.empty?
-
+    p crawl_results
     uri = URI(u);
 
     urls = {}
-    urls = crawl_results['links'].select! { |u|
-      u if domain_url?(uri.host, u['url'])
-    }.each { |u|
-      u[:sha1] = DukeOfUrl::SHA1.hexdigest(u['url'])
-      u[:stats] = recon(u['url'],'/')
-    }
+    unless crawl_results['links'].empty?
+      p "doing something on #{crawl_results['links']}"
+      n = 0;
+      urls = crawl_results['links'].select! { |u|
+        u if domain_url?(uri.host, u['url'])
+      }.each { |u|
+        if (++n < 10)
+          u[:sha1] = DukeOfUrl::SHA1.hexdigest(u['url'])
+          u[:stats] = recon(u['url'],'/')
+        end
+      }
+    end
+    urls
   end
 
   def self.domain_url?(host, u)
@@ -59,17 +68,17 @@ class ScreamingFrog
 
   def self.recon(u, p)
     payload = {}
-    payload[:status] = url_status(u)
+    payload.merge!(url_status(u))
 
     if payload[:status] < 400
-      Wombat.crawl do
+      stats = Wombat.crawl do
         base_url u
         path p
 
         canonical 'xpath=/html/head//link[@rel="canonical"]/@href'
+        description 'xpath=/html/head//meta[@name="description"]/@content'
       end
-    else
-      p "Skipping #{u} due to status #{payload[:status]}"
+      payload.merge!(stats)
     end
 
     payload
@@ -83,19 +92,21 @@ class ScreamingFrog
       links 'xpath=/html/body//a', :iterator do
         link_text 'xpath=./text()'
         url 'xpath=./@href'
-        # meta 'xpath=./@meta'
       end
     end
   end
 
   def self.url_status(u)
-    begin
-      p "Verifying url #{u}"
-      mp = Mechanize.new.get(u)
-      mp.code.to_i
-    rescue Mechanize::ResponseCodeError => e
-      e.response_code.to_i
-    end
+    status = begin
+               url = URI.parse(u.end_with?('/') ? u : "#{u}/")
+               req = Net::HTTP.new(url.host, url.port)
+               res = req.request_head(url.path)
+               p "#{res.code}: #{u}"
+               res.code.to_i
+             rescue StandardError => e
+               500
+             end
+    {status: status}
   end
 
   def self.work(u, p)
