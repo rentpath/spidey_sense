@@ -7,13 +7,17 @@ require 'duke_of_url'
 class UrlStats
   include Wombat::Crawler
 
-  def self.name
+  LIST_MODE   = :list
+  SPIDER_MODE = :spider
+
+  def self.sensor_name
     'URL Stats Sensor'
   end
 
-  def self.process(url, path = '/')
+  def self.process(mode, url, path = '/')
     results = {
-      sensor: self.name,
+      sensor: sensor_name,
+      mode: mode,
       sha1: DukeOfUrl::SHA1.hexdigest(url),
       seed_url: url,
       time: Time.now.utc,
@@ -21,73 +25,85 @@ class UrlStats
       urls: []
     }
 
-    crawl_results   = work(url, path)
-    results[:stats] = build_stat_results(crawl_results)
-    results[:urls]  = build_url_results(url, crawl_results)
+    results.merge! work({ url: url, path: path, mode: mode })
     results
   end
 
   private
 
-  def self.work(url, path)
-    payload = {}
-    payload.merge! self.get_stats(url, path)
-    # payload.merge! self.extract_urls(url, path) if (payload[:status] < 400)
+  def self.work(config = {})
+    url, path, mode = config[:url], config[:path], config[:mode]
+
+    payload = {}.tap { |payload|
+      payload.merge! url_status(url)
+
+      if payload[:status] < 400
+        crawl_results = crawl.call(url, mode)
+        payload.merge! data_fields(crawl_results)
+        payload.merge! check_urls(url, crawl_results)
+      end
+    }
     payload
   end
 
-  def self.get_stats(url, path)
-    payload = {}
-    payload.merge!(url_status(url))
-
-    if payload[:status] < 400
-      stats = Wombat.crawl do
-        base_url url
-        path path
-
-        canonical 'xpath=/html/head//link[@rel="canonical"]/@href'
-        description 'xpath=/html/head//meta[@name="description"]/@content'
+  def self.crawl
+    return lambda { |url, mode|
+      instructions = get_instructions(mode)
+      return Wombat.crawl do
+        mp = Mechanize.new.get url
+        @metadata_dup.page(mp)
+        instructions.each { |op| op.call(@metadata_dup) }
       end
-      payload.merge!(stats)
-    end
-
-    payload
-  end
-
-  def self.extract_urls(url, path)
-    Wombat.crawl do
-      base_url url
-      path path
-
-      links 'xpath=/html/body//a', :iterator do
-        link_text 'xpath=./text()'
-        url 'xpath=./@href'
-      end
-    end
-  end
-
-  def self.build_stat_results(crawl_results)
-    {
-      status: crawl_results[:status],
-      canonical: crawl_results['canonical'],
-      description: crawl_results['description']
     }
   end
 
-  def self.build_url_results(url, crawl_results)
+  def self.get_instructions(mode)
+    instructions = [get_stats]
+    case mode
+    when SPIDER_MODE.to_s
+      instructions << get_stats << get_urls
+    end
+    instructions
+  end
+
+  def self.get_stats
+    return lambda { |metadata|
+      metadata.canonical 'xpath=/html/head//link[@rel="canonical"]/@href'
+      metadata.description 'xpath=/html/head//meta[@name="description"]/@content'
+    }
+  end
+
+  def self.get_urls
+    return lambda { |metadata|
+      metadata.links 'xpath=/html/body//a', :iterator do
+        link_text 'xpath=./text()'
+        url 'xpath=./@href'
+      end
+    }
+  end
+
+  def self.data_fields(crawl_results)
+    {
+      fields: {
+        canonical: crawl_results['canonical'],
+        description: crawl_results['description']
+        }
+    }
+  end
+
+  def self.check_urls(url, crawl_results)
     return {} if crawl_results.nil? || crawl_results['links'].nil?
 
-    urls = {}
+    uri, urls = URI(url), {}
 
-    uri = URI(url);
     urls = crawl_results['links'].select! { |u|
       u if domain_url?(uri.host, u['url'])
     }.each { |u|
       u[:sha1] = DukeOfUrl::SHA1.hexdigest(u['url'])
-      u[:stats] = get_stats(u['url'],'/')
+      u[:stats] = work({ url: u['url'], mode: LIST_MODE })
     }
 
-    urls
+    { urls: urls }
   end
 
   def self.domain_url?(host, u)
