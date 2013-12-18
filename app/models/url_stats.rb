@@ -60,7 +60,7 @@ class UrlStats
     instructions = [get_stats]
     case mode
     when SPIDER_MODE.to_s
-      instructions << get_stats << get_urls
+      instructions << get_urls
     end
     instructions
   end
