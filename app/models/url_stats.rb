@@ -3,7 +3,6 @@ require "net/http"
 require 'wombat'
 require 'duke_of_url'
 
-
 class UrlStats
   include Wombat::Crawler
 

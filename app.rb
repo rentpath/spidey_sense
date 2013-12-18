@@ -2,10 +2,6 @@ require 'slim'
 require 'json'
 require_relative 'app/models/url_stats'
 
-require 'pry'
-require 'pry-nav'
-
-
 post '/work' do
   params = JSON.parse(request.env["rack.input"].read)
   content_type :json
@@ -15,7 +11,7 @@ post '/work' do
     data: {}
   }
 
-  params['mode'] ||= 'list'
+  params['mode'] ||= UrlStats.LIST_MODE
   params['urls'].each { |u|
     payload[:data][u] = UrlStats.process(params['mode'], u)
   }
