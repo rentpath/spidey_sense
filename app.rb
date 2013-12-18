@@ -14,6 +14,10 @@ post '/work' do
     run_token: params['run_token'],
     data: {}
   }
-  params['urls'].each { |u| payload[:data][u] = UrlStats.process(u) }
+
+  params['mode'] ||= 'list'
+  params['urls'].each { |u|
+    payload[:data][u] = UrlStats.process(params['mode'], u)
+  }
   payload.to_json
 end
