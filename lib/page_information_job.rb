@@ -4,8 +4,8 @@ class PageInformationJob < Motorurl::Job
     def probe(url)
       domain         = UrlUtility.domain url
       crawl          = PageInformationWombat.new(url).crawl
-      internal_links = crawl.links.select { |link| UrlUtility.in_domain link.url, domain } 
-      crawl.links    = internal_links
+      crawl.urls.select! { |link| UrlUtility.in_domain link.url, domain }
+      crawl.urls.map     { |link| link.sha1 = UrlUtility.sha1 link.url }
 
       { stats: crawl }.merge(status url)
     end

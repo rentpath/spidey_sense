@@ -20,7 +20,7 @@ class PageInformationWombat
       description  'xpath=/html/head//meta[@name="description"]/@content' 
       headers      '.*', :headers
 
-      links       'xpath=/html/body//a', :iterator do
+      urls        'xpath=/html/body//a', :iterator do
         link_text 'xpath=./text()'
         url       'xpath=./@href'
       end

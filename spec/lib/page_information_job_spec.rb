@@ -22,7 +22,8 @@ describe PageInformationJob do
         expect(stats.canonical).to eq('http://example.com/page.html')
         expect(stats.description).to eq('Meta description')
         expect(stats.headers).to_not be_empty
-        expect(stats.links.all? { |l| l.url.match(/example.com\//) }).to be_true
+        expect(stats.urls.all? { |u| u.url.match(/example.com\//) }).to be_true
+        expect(stats.urls.all? { |u| u.sha1.present? }).to be_true
       end
   	end
   end
