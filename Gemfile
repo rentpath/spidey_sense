@@ -9,7 +9,7 @@ gem 'mechanize'
 gem 'motorurl', path: '../motorurl'
 gem 'rails-api'
 gem 'sidekiq'
-gem 'sinatra'
+gem 'sinatra', '>= 2.2.0'
 gem 'wombat'
 
 group :development, :test do
